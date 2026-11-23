@@ -1,0 +1,12 @@
+Additional permission under GNU GPL version 3 section 7
+
+The copyright holders who grant this permission allow you to link or
+combine the covered parts of Rtx50Temps with the unmodified NVIDIA NVAPI
+implementation (nvapi64.dll) supplied with NVIDIA's Windows graphics
+driver, including by loading it at run time, and to convey the resulting
+work. When using this permission, the Corresponding Source that you
+provide for Rtx50Temps need not include the source of that NVIDIA library.
+
+The covered parts of Rtx50Temps remain subject to GNU GPL version 3.
+This additional permission grants no rights in NVIDIA software. Its
+redistribution, if any, is subject to its own terms.
