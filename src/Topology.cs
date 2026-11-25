@@ -54,7 +54,7 @@ internal sealed class Channel {
     }
 }
 internal sealed class Topology {
-    public int PciId, Base; public readonly List<DeviceRow> Devices=new List<DeviceRow>();
+    public int PciId; public readonly List<DeviceRow> Devices=new List<DeviceRow>();
     public readonly List<Channel> Channels=new List<Channel>();
     public Caption ScanRestriction;
     internal static int U16(byte[] b,int o){return BitConverter.ToUInt16(b,o);}
@@ -104,7 +104,7 @@ internal sealed class Topology {
                     if(b[q]!='P' || U16(b,q+2)<0x4c)continue;
                     int token=p+U16(b,q+4);
                     Check(token<=p+len-0x4c,new Caption("BIT P 指针越界", "BIT P pointer is out of bounds"));
-                    var t=new Topology{PciId=id,Base=p};
+                    var t=new Topology{PciId=id};
                     foreach(int field in new[]{0x14,0x48}){
                         uint rel=U32(b,token+field); Check(rel!=0,new Caption("缺少热表", "Missing thermal table"));
                         long addr=p+(long)rel+(rel>=len?efi:0);

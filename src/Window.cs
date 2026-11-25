@@ -57,6 +57,7 @@ internal sealed class Window : Form {
             grid.Columns[idx].SortMode=DataGridViewColumnSortMode.NotSortable;
         }
         status.Dock=DockStyle.Bottom;status.Height=32;status.Padding=new Padding(8,6,0,0);status.AutoEllipsis=true;
+        grid.Columns["label"].DefaultCellStyle.WrapMode=DataGridViewTriState.True;
         Controls.Add(grid);Controls.Add(status);Controls.Add(bar);
         ApplyLanguage();
         ResumeLayout(true);

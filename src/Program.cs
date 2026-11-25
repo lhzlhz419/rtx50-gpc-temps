@@ -21,7 +21,6 @@ internal static class Program {
         public static string Serialize<T>(T value){return JsonSerializer.Serialize(value,Options);}
         static readonly JsonSerializerOptions PipeOptions=new JsonSerializerOptions{IncludeFields=true};
         public static string ForConsole<T>(T value){return Console.IsOutputRedirected?JsonSerializer.Serialize(value,PipeOptions):Serialize(value);}
-        public static T Deserialize<T>(string text){return JsonSerializer.Deserialize<T>(text,Options);}
     }
     static volatile bool quit;
     internal static void Save(string file,object obj){

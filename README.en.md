@@ -4,7 +4,7 @@
 
 Read local junction temperatures from individual BJT probes in each GPC, along with GPU thermal zones and VRAM temperatures. Verified on the **GeForce RTX 5060 Laptop GPU** and **GeForce RTX 5080 Laptop GPU**.
 
-For example, `GPC.1.BJT.5` identifies probe 5 in cluster 1 of the thermal selector. **The selector's GPC numbers may differ from the physical GPC numbers in the GPU's compute topology.** A BJT number alone does not identify an SM, TPC, or die coordinate.
+For example, `GPC.1.BJT.5` identifies probe 5 on thermal selector 1. When connecting to a GPU, the program reads its logical-to-hardware GPC (chiplet ID) mapping directly through the NVIDIA driver. On the tested 5060 Laptop GPU this row reads “Logical GPC 0 · hardware GPC 1 (matching selector ID)”. A BJT number alone does not identify an SM, TPC, or die coordinate.
 
 ![Live temperature readings on a GeForce RTX 5060 Laptop GPU](docs/rtx-5060-laptop.png)
 
@@ -24,6 +24,12 @@ The same executable runs as a CLI in an **elevated PowerShell**. Use `--lang en`
 ~~~
 
 To build from source, install the .NET 9 SDK and run `.\build.ps1` from the repository root. The resulting single executable, `dist/win-x64/Rtx50Temps.exe`, uses the installed desktop runtime.
+
+### Interpreting GPC IDs
+
+The driver topology table is indexed by logical GPC. The program checks that each hardware GPC in the enabled mask occurs exactly once. In JSON snapshots, `logical_to_hardware_gpc` holds this mapping. For example, `[1, 0, 2]` maps logical GPC 0 to hardware GPC 1. An unsuccessful read or validation produces `null`.
+
+Thermal selectors have their own numbering. When their full ID set matches the enabled hardware GPC IDs, raw and offset BJT rows show the logical GPC associated with the same-numbered chiplet and report `gpc.association = "matching_chiplet_id"`. Per-SM heating confirmed this association on one 5060 Laptop GPU. Other boards need independent verification. If the sets cannot be matched, the temperature and selector remain available and the logical and hardware IDs are `null`.
 
 ## License
 

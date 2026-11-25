@@ -3,15 +3,17 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 namespace Rtx50Temps {
 internal sealed class Reading {
     public string id,time;
     public Caption meaning,source,status;
     public double? c;
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public GpcIds gpc {get;init;}
     public static readonly Caption Valid = new("有效", "Valid");
     public Reading(string key,Caption label,double? value,Caption origin,Caption issue){
         id=key;meaning=label;c=value;source=origin;status=value.HasValue?Valid:issue;
@@ -21,22 +23,25 @@ internal sealed class Reading {
 internal sealed class Sample {
     public string gpu,adapter,vbios,time; public Caption topology; public List<Reading> sensors=new List<Reading>();
     public bool mux_restored=true;
+    public int[] logical_to_hardware_gpc;
     public List<MuxCheck> mux_checks=new();
-    public void Add(string id,Caption label,double? c,Caption source,Caption issue=null){
-        sensors.Add(new Reading(id,label,c,source,issue ?? new Caption("接口未给有效值", "No valid value returned")));
+    public void Add(string id,Caption label,double? c,Caption source,Caption issue=null,GpcIds gpc=null){
+        sensors.Add(new Reading(id,label,c,source,issue ?? new Caption("接口未给有效值", "No valid value returned")){gpc=gpc});
     }
 }
 internal sealed record MuxCheck(int gpc,int valid,int nvapi_rc,bool restored,double elapsed_us);
 internal sealed class Reader {
-    readonly Nvidia api; public readonly Card Card; public readonly byte[] Image,Info; public readonly Topology Top;
+    readonly Nvidia api; readonly Card Card; readonly byte[] Info; readonly Topology Top;
     public readonly Caption TopologyError;
+    readonly GpcMap gpcMap;
     const int Mux=0xad0840;
     public Reader(Nvidia api,Card c){
         this.api=api;Card=c;
-        try{Image=api.Image(c);Top=Topology.Parse(Image,c.Did);}
+        try{Top=Topology.Parse(api.Image(c),c.Did);}
         catch(InvalidDataException e){TopologyError=Caption.FromError(e);}
         catch(IOException e){TopologyError=Caption.FromError(e);}
         Info=api.Info(Card);
+        gpcMap=GpcMap.Read(api,c,Gpcs.Select(ch=>ch.Device.Loc-4));
     }
     internal static double? Q5(uint? word){
         if(!word.HasValue || (word.Value&0x40000000u)==0)return null;
@@ -66,7 +71,8 @@ internal sealed class Reader {
     };
     public Sample Read(){
         var s=new Sample{gpu=Card.Name,adapter=Card.Key,vbios=Card.Version,time=DateTimeOffset.UtcNow.ToString("o"),
-                         topology=Top!=null?new("活动 VBIOS", "Active VBIOS"):TopologyError};
+                         topology=Top!=null?new("活动 VBIOS", "Active VBIOS"):TopologyError,
+                         logical_to_hardware_gpc=gpcMap.LogicalToHardware};
         foreach(var p in api.PublicTemperatures(Card)){
             Caption name=p.Item2 switch {
                 1 => new("GPU 核心", "GPU core"), 2 => new("显存", "VRAM"),
@@ -114,6 +120,8 @@ internal sealed class Reader {
                   new("配置范围异常", "Invalid configured range"));return;
         }
         int gpc=ch.Device.Loc-4;
+        GpcIds ids=g?gpcMap.ForSelector(gpc):null;
+        Caption device=ids?.Label() ?? ch.Device.Meaning;
         uint?[] scan=null;
         BjtBatch batch=null;
         if(g && valid && RangeMatches(ch,ch.End)){
@@ -127,7 +135,6 @@ internal sealed class Reader {
         }
         for(int j=0;j<count;j++){
             string id=g?"GPC."+gpc+".BJT."+j:"CH."+ch.Id+".P."+j;
-            var device=ch.Device.Meaning;
             Caption name=g
                 ? new($"{device.Zh} · BJT {j} 局部结温（具体单元未公开）", $"{device.En} · BJT {j} junction (physical unit unknown)")
                 : new($"{device.Zh} · 探头 {j}", $"{device.En} · probe {j}");
@@ -138,15 +145,15 @@ internal sealed class Reader {
                 v=Q5(scan[1]);source=new("GET 后核对 GPC 与探头选择器", "GPC and probe selector verified after GET");
             }
             if(batch!=null && batch.Values.TryGetValue(j,out var pair)){
-                s.Add(id,name,pair.Raw,new("硬件轮询 · 选择器双读", "Hardware polling, selector read twice"));
-                s.Add(id+".OFFSET",offsetLabel,pair.Offset,new("同一探头偏移输出", "Offset output of the same probe"));
+                s.Add(id,name,pair.Raw,new("硬件轮询 · 选择器双读", "Hardware polling, selector read twice"),gpc:ids);
+                s.Add(id+".OFFSET",offsetLabel,pair.Offset,new("同一探头偏移输出", "Offset output of the same probe"),gpc:ids);
                 continue;
             }
             s.Add(id,name,v,source,g
                 ? new("未取得有效的目标探头读数；检查权限和驱动支持", "No valid probe reading. Check permissions and driver support.")
-                : new("驱动未返回该输入的有效温度", "Driver returned no valid temperature for this input"));
+                : new("驱动未返回该输入的有效温度", "Driver returned no valid temperature for this input"),ids);
             if(g && j==ch.End && scan!=null)
-                s.Add(id+".OFFSET",offsetLabel,Q5(scan[2]),new("同一选择器的偏移输出", "Offset output of the same selector"));
+                s.Add(id+".OFFSET",offsetLabel,Q5(scan[2]),new("同一选择器的偏移输出", "Offset output of the same selector"),gpc:ids);
         }
     }
     static void Fill(Sample s,string id,double? value,Caption source){
